@@ -17,6 +17,7 @@ class InterfaceType(str, Enum):
     """Interface type enumeration"""
     WEB = "web"
     ANDROID = "android"
+    IOS = "ios"
 
 
 class NodeType(str, Enum):

@@ -337,12 +337,26 @@ class iOSDevice(AbstractInterface):
         """Take screenshot and return base64 string"""
         try:
             import base64
+            from io import BytesIO
 
-            # TODO: Implement using pymobiledevice3 ScreenshotService
-            # For now, return a placeholder
+            if not self._lockdown:
+                raise iOSScreenshotError("Device not connected")
+
             logger.debug("Taking screenshot")
-            return ""
+            
+            # Use pymobiledevice3 ScreenshotService
+            from pymobiledevice3.services.screenshot import ScreenshotService
+            
+            screenshot_service = ScreenshotService(lockdown=self._lockdown)
+            screenshot_data = screenshot_service.take_screenshot()
+            
+            # screenshot_data is PNG bytes
+            screenshot_base64 = base64.b64encode(screenshot_data).decode('utf-8')
+            
+            return screenshot_base64
 
+        except iOSScreenshotError:
+            raise
         except Exception as e:
             logger.error(f"Failed to take screenshot: {e}")
             raise iOSScreenshotError(f"Screenshot failed: {e}")
