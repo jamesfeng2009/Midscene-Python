@@ -29,3 +29,20 @@ class iOSScreenshotError(iOSOperationError):
 class iOSTouchError(iOSOperationError):
     """Touch operation failed"""
     pass
+
+
+class iOSCoordinateError(iOSOperationError):
+    """Coordinate out of bounds error
+    
+    Raised when AI-located coordinates are outside the screen bounds.
+    """
+    
+    def __init__(self, x: float, y: float, width: float, height: float):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        super().__init__(
+            f"Coordinates ({x}, {y}) are out of screen bounds "
+            f"(0 <= x < {width}, 0 <= y < {height})"
+        )
