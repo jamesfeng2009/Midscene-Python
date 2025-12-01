@@ -20,6 +20,7 @@ from ..core.types import (
     AbstractInterface, InterfaceType, UIContext, BaseElement, UINode, UITree,
     Size, Rect, Point, NodeType
 )
+from .errors import AndroidDeviceNotFoundError, AndroidScreenshotError, AndroidTouchError, AndroidCoordinateError, AndroidADBError
 
 
 class AndroidElement(BaseElement):
@@ -126,7 +127,7 @@ class AndroidDevice(AbstractInterface):
             # Check if device is available
             devices = await self.list_devices()
             if self.device_id not in devices:
-                raise RuntimeError(f"Device {self.device_id} not found")
+                raise AndroidDeviceNotFoundError(self.device_id)
             
             # Get screen size
             await self._get_screen_size()
@@ -138,9 +139,35 @@ class AndroidDevice(AbstractInterface):
             self._connected = True
             logger.info(f"Connected to Android device: {self.device_id}")
             
+        except AndroidDeviceNotFoundError:
+            raise
         except Exception as e:
             logger.error(f"Failed to connect to device: {e}")
             raise
+
+    def validate_coordinates(self, x: float, y: float) -> None:
+        """Validate that coordinates are within screen bounds
+        
+        This method ensures AI-located coordinates are within the screen bounds
+        before tap operations.
+        
+        Args:
+            x: X coordinate to validate
+            y: Y coordinate to validate
+            
+        Raises:
+            AndroidCoordinateError: If coordinates are outside screen bounds
+            RuntimeError: If screen size is not available
+        """
+        if self._screen_size is None:
+            raise RuntimeError("Screen size not available. Device may not be connected.")
+        
+        width = self._screen_size.width
+        height = self._screen_size.height
+        
+        # Check if coordinates are within bounds: 0 <= x < width, 0 <= y < height
+        if not (0 <= x < width and 0 <= y < height):
+            raise AndroidCoordinateError(x, y, width, height)
     
     @property
     def interface_type(self) -> InterfaceType:
@@ -180,25 +207,67 @@ class AndroidDevice(AbstractInterface):
         ]
     
     async def tap(self, x: float, y: float) -> None:
-        """Tap at coordinates"""
+        """Tap at coordinates
+        
+        Validates that coordinates are within screen bounds before performing
+        the tap operation, ensuring AI-located coordinates are valid.
+        
+        Args:
+            x: X coordinate to tap
+            y: Y coordinate to tap
+            
+        Raises:
+            AndroidTouchError: If device is not connected or tap fails
+            AndroidCoordinateError: If coordinates are outside screen bounds
+        """
         try:
+            if not self._connected:
+                raise AndroidTouchError("Device not connected")
+            
+            # Validate coordinates are within screen bounds
+            if self._screen_size is not None:
+                self.validate_coordinates(x, y)
+            
             await self._run_adb_command([
                 "-s", self.device_id, "shell", "input", "tap", str(int(x)), str(int(y))
             ])
+            logger.debug(f"Tap at ({x}, {y})")
+        except (AndroidTouchError, AndroidCoordinateError):
+            raise
         except Exception as e:
             logger.error(f"Failed to tap at ({x}, {y}): {e}")
-            raise
+            raise AndroidTouchError(f"Tap failed: {e}")
     
     async def long_press(self, x: float, y: float, duration: int = 1000) -> None:
-        """Long press at coordinates"""
+        """Long press at coordinates
+        
+        Args:
+            x: X coordinate to press
+            y: Y coordinate to press
+            duration: Duration of press in milliseconds (default: 1000ms)
+            
+        Raises:
+            AndroidTouchError: If device is not connected or long press fails
+            AndroidCoordinateError: If coordinates are outside screen bounds
+        """
         try:
+            if not self._connected:
+                raise AndroidTouchError("Device not connected")
+            
+            # Validate coordinates are within screen bounds
+            if self._screen_size is not None:
+                self.validate_coordinates(x, y)
+            
             await self._run_adb_command([
                 "-s", self.device_id, "shell", "input", "swipe", 
                 str(int(x)), str(int(y)), str(int(x)), str(int(y)), str(duration)
             ])
+            logger.debug(f"Long press at ({x}, {y}) for {duration}ms")
+        except (AndroidTouchError, AndroidCoordinateError):
+            raise
         except Exception as e:
             logger.error(f"Failed to long press at ({x}, {y}): {e}")
-            raise
+            raise AndroidTouchError(f"Long press failed: {e}")
     
     async def swipe(
         self, 
@@ -206,16 +275,33 @@ class AndroidDevice(AbstractInterface):
         end_x: float, end_y: float, 
         duration: int = 300
     ) -> None:
-        """Swipe between coordinates"""
+        """Swipe between coordinates
+        
+        Args:
+            start_x: Starting X coordinate
+            start_y: Starting Y coordinate
+            end_x: Ending X coordinate
+            end_y: Ending Y coordinate
+            duration: Duration of swipe in milliseconds (default: 300ms)
+            
+        Raises:
+            AndroidTouchError: If device is not connected or swipe fails
+        """
         try:
+            if not self._connected:
+                raise AndroidTouchError("Device not connected")
+            
             await self._run_adb_command([
                 "-s", self.device_id, "shell", "input", "swipe",
                 str(int(start_x)), str(int(start_y)), 
                 str(int(end_x)), str(int(end_y)), str(duration)
             ])
+            logger.debug(f"Swipe from ({start_x}, {start_y}) to ({end_x}, {end_y})")
+        except AndroidTouchError:
+            raise
         except Exception as e:
             logger.error(f"Failed to swipe: {e}")
-            raise
+            raise AndroidTouchError(f"Swipe failed: {e}")
     
     async def input_text(self, text: str) -> None:
         """Input text"""
@@ -324,7 +410,14 @@ class AndroidDevice(AbstractInterface):
             raise
     
     async def _take_screenshot(self) -> str:
-        """Take screenshot and return base64 string"""
+        """Take screenshot and return base64 string
+        
+        Returns:
+            Base64 encoded screenshot string
+            
+        Raises:
+            AndroidScreenshotError: If screenshot capture fails
+        """
         try:
             # Take screenshot using screencap
             result = await self._run_adb_command([
@@ -338,7 +431,7 @@ class AndroidDevice(AbstractInterface):
             
         except Exception as e:
             logger.error(f"Failed to take screenshot: {e}")
-            raise
+            raise AndroidScreenshotError(f"Screenshot capture failed: {e}")
     
     async def _get_ui_elements(self) -> List[AndroidElement]:
         """Get UI elements using uiautomator dump"""

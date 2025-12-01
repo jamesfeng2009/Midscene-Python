@@ -4,7 +4,7 @@ Agent - Core automation controller that orchestrates AI and device interactions
 
 import asyncio
 import json
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
 from loguru import logger
 
@@ -15,6 +15,9 @@ from .types import (
     ScrollParam
 )
 from .ai_model import AIModelService, AIModelConfig
+
+# Type variable for platform-specific interface
+InterfaceT = TypeVar("InterfaceT", bound=AbstractInterface)
 
 
 class TaskExecutor:
@@ -252,21 +255,31 @@ class TaskExecutor:
         """.strip()
 
 
-class Agent:
-    """Core Agent class that orchestrates AI model and device interactions"""
+class Agent(Generic[InterfaceT]):
+    """Core Agent class that orchestrates AI model and device interactions
+    
+    Generic over the interface type to provide type-safe access to
+    platform-specific device methods.
+    
+    Type Parameters:
+        InterfaceT: The platform-specific interface type (e.g., AndroidDevice, iOSDevice)
+    """
+    
+    # Type hint for the interface - subclasses can override with specific type
+    interface: InterfaceT
     
     def __init__(
         self,
-        interface: AbstractInterface,
+        interface: InterfaceT,
         options: Optional[AgentOptions] = None
     ):
         """Initialize Agent
         
         Args:
-            interface: Platform interface (web/android)
+            interface: Platform interface (web/android/ios)
             options: Agent configuration options
         """
-        self.interface = interface
+        self.interface: InterfaceT = interface
         self.options = options or AgentOptions()
         
         # Initialize AI service

@@ -73,7 +73,7 @@ class WaitConfig:
     page_load_timeout_ms: int = 30000  # 页面加载超时
 
 
-class iOSAgent(Agent):
+class iOSAgent(Agent[iOSDevice]):
     """iOS-specific agent implementation
     
     Inherits all AI-driven capabilities from the base Agent class:
